@@ -1,6 +1,7 @@
 import os
 import pickle
 import numpy as np
+from numpy.core.defchararray import array, decode
 
 
 def load_feature(feature_path, label_path):
@@ -27,8 +28,35 @@ def load_feature(feature_path, label_path):
 
 
 def load_class(class_path):
-    classes = np.load(class_path)
-    print(classes)
+    r"""
+    load all the class names and cut the column of class number
+
+    Parameter
+    --------
+    feature_path:path to classes.txt
+
+    Returns
+    --------
+    class_array:a ndarray contains all the class names.
+    """
+    class_array = np.loadtxt(class_path, dtype=str)
+    class_array = np.delete(class_array, 0, 1)
+    return class_array
+
+def load_attribute(attribute_path):
+    r"""
+    load all the attributes vectors, each vector is 1x50 size. It means every class owns 50 attributes. e.g. striped, white etc
+
+    Parameter
+    --------
+    feature_path:path to attributes.txt
+
+    Returns
+    --------
+    class_array:a ndarray contains all the attributes vectors.
+    """
+    attribute_array = np.loadtxt(attribute_path)
+    return attribute_array
 
 
 def load_featureNpy(npy_path):
@@ -46,4 +74,5 @@ def load_featureNpy(npy_path):
 if __name__ == '__main__':
     # load_class(
     #     "/home/llrt/文档/Animals_with_Attributes2/classes.txt")
-    load_featureNpy("feature.npy")
+    # load_featureNpy("feature.npy")
+    load_attribute("/home/llrt/文档/Animals_with_Attributes2/predicate-matrix-binary.txt")
