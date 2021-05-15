@@ -8,35 +8,57 @@ import datetime
 import pickle
 
 
-def trainSVM(feature, attributes, model_name):
+def trainSVM(feature, attributes, model_name, atrribute_num):
     print('-----------------------------------training begin-------------------------------------------')
     start_time = datetime.datetime.now()
-    Y = np.ones(2000)
-    for i in range(2000):
+    Y = np.ones(34199)
+    for i in range(34199):
         # remember class is 1-50, not from 0
-        Y[i] = attributes[int(feature[i, 0]-1), 0]
+        Y[i] = attributes[int(feature[i, 0]-1), atrribute_num]
     clf = svm.SVC(gamma=5, kernel='rbf', C=10)
-    clf.fit(feature[:2000, 1:], Y)
+    clf.fit(feature[:34199, 1:], Y)
     endtime = datetime.datetime.now()
     print('-----------------------------------training over--------------------------------------------')
     print("total cost time: %d s" % (endtime - start_time).seconds)
     print("saving model to %s.pkl" % model_name)
     pickle.dump(clf, open(model_name+".pkl", "wb"))
     print("model saved")
+    print(" ")
+
+
+def find_classPoisition(feature,  classes):
+    classes_pos = {}
+    current_class = classes[int(feature[0, 0])]
+    start_point = 0
+    end_point = 0
+    last = current_class
+    for i in range(feature.shape[0]):
+        current_class = classes[int(feature[i, 0] - 1)]
+        if current_class != last or i == (feature.shape[0]-1):
+            end_point = i
+            classes_pos.update({last: ("[%d, %d]" % (start_point, end_point))})
+            start_point = i
+        last = current_class
+    with open('data.txt', 'w') as f:  # 设置文件对象
+        f.write(str(classes_pos))  # 将字符串写入文件中
 
 
 def loadSVM(model_path):
     return pickle.load(open(model_path, "rb"))
 
 
+attriName = mload.load_attriName(
+    "/home/llrt/文档/Animals_with_Attributes2/predicates.txt")
 feature = mload.load_featureNpy("feature.npy")
 attributes = mload.load_attribute(
     "/home/llrt/文档/Animals_with_Attributes2/predicate-matrix-binary.txt")
 classes = mload.load_class(
     "/home/llrt/文档/Animals_with_Attributes2/classes.txt")
-isbalck_model = loadSVM("isBlack.pkl")
-x = isbalck_model.decision_function(feature[:1,1:])
-print(x)
+
+for i in range(len(attriName)):
+    print("model %d" % (i+1))
+    print(attriName[i])
+    trainSVM(feature, attributes, attriName[i], i-1)
 
 
 # X, Y = make_blobs(n_samples=40, centers=2, random_state=6)

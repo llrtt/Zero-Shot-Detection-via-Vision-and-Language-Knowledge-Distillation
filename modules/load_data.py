@@ -41,7 +41,8 @@ def load_class(class_path):
     """
     class_array = np.loadtxt(class_path, dtype=str)
     class_array = np.delete(class_array, 0, 1)
-    return class_array
+    return class_array.reshape((50,))
+
 
 def load_attribute(attribute_path):
     r"""
@@ -71,8 +72,24 @@ def load_featureNpy(npy_path):
     return np.load(npy_path)
 
 
+def load_attriName(attriName_path):
+    r"""
+    load attribute names to an array
+    Returns
+    --------
+    sum_array:an array of attribute names
+    """
+    attriName_array = np.loadtxt(attriName_path, dtype=str)
+    attriName_array = np.delete(attriName_array, 0, 1)
+    return attriName_array.reshape((85,))
+
+
 if __name__ == '__main__':
     # load_class(
     #     "/home/llrt/文档/Animals_with_Attributes2/classes.txt")
     # load_featureNpy("feature.npy")
-    load_attribute("/home/llrt/文档/Animals_with_Attributes2/predicate-matrix-binary.txt")
+    # load_attribute(
+    #     "/home/llrt/文档/Animals_with_Attributes2/predicate-matrix-binary.txt")
+    # print(load_attriName(
+    #     "/home/llrt/文档/Animals_with_Attributes2/predicates.txt"))
+    load_feature("/home/llrt/文档/Animals_with_Attributes2/Features/ResNet101/AwA2-features.txt","/home/llrt/文档/Animals_with_Attributes2/Features/ResNet101/AwA2-labels.txt")
