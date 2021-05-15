@@ -1,17 +1,43 @@
-from sklearn import svm
+# from sklearn import svm
+import cuml.svm as svm
 from sklearn.datasets import make_blobs
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 import modules.load_data as mload
+import datetime
+import pickle
 
 
-def trainSVM(feature, attributes):
+def trainSVM(feature, attributes, model_name):
+    print('-----------------------------------training begin-------------------------------------------')
+    start_time = datetime.datetime.now()
     Y = np.ones(2000)
     for i in range(2000):
-        #remember class is 1-50, not from 0
+        # remember class is 1-50, not from 0
         Y[i] = attributes[int(feature[i, 0]-1), 0]
     clf = svm.SVC(gamma=5, kernel='rbf', C=10)
-    clf.fit(feature[:2000,1:], Y)
+    clf.fit(feature[:2000, 1:], Y)
+    endtime = datetime.datetime.now()
+    print('-----------------------------------training over--------------------------------------------')
+    print("total cost time: %d s" % (endtime - start_time).seconds)
+    print("saving model to %s.pkl" % model_name)
+    pickle.dump(clf, open(model_name+".pkl", "wb"))
+    print("model saved")
+
+
+def loadSVM(model_path):
+    return pickle.load(open(model_path, "rb"))
+
+
+feature = mload.load_featureNpy("feature.npy")
+attributes = mload.load_attribute(
+    "/home/llrt/文档/Animals_with_Attributes2/predicate-matrix-binary.txt")
+classes = mload.load_class(
+    "/home/llrt/文档/Animals_with_Attributes2/classes.txt")
+isbalck_model = loadSVM("isBlack.pkl")
+x = isbalck_model.decision_function(feature[:1,1:])
+print(x)
+
 
 # X, Y = make_blobs(n_samples=40, centers=2, random_state=6)
 # clf = svm.SVC(gamma=5, kernel='rbf', C=10)
@@ -35,9 +61,3 @@ def trainSVM(feature, attributes):
 # ax.scatter(clf.support_vectors_[:, 0], clf.support_vectors_[
 #            :, 1], s=100, linewidth=1, facecolors='none', edgecolors='k')
 # plt.show()
-feature = mload.load_featureNpy("feature.npy")
-attributes = mload.load_attribute(
-    "/home/llrt/文档/Animals_with_Attributes2/predicate-matrix-binary.txt")
-classes = mload.load_class(
-    "/home/llrt/文档/Animals_with_Attributes2/classes.txt")
-trainSVM(feature, attributes)
