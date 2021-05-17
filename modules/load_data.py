@@ -83,6 +83,9 @@ def load_attriName(attriName_path):
     attriName_array = np.delete(attriName_array, 0, 1)
     return attriName_array.reshape((85,))
 
+def loadSVM(model_path):
+    return pickle.load(open(model_path, "rb"))
+
 
 if __name__ == '__main__':
     # load_class(
