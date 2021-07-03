@@ -96,15 +96,15 @@ class vocData(Dataset):
         target["area"] = area
         target["iscrowd"] = iscrowd
         if self.transform is not None:
-            img, target = self.transform(image, target)
-        return img, target
+            image, target = self.transform(image, target)
+        return image, target
 
 
 if __name__ == '__main__':
     preprocess = get_transform(True)
     data = vocData("/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
     loader = torch.utils.data.DataLoader(
-        data, batch_size=1, shuffle=True, num_workers=4,
+        data, batch_size=1, shuffle=False, num_workers=4,
         collate_fn=utils.collate_fn)
     print(len(data))
     i = 0
@@ -117,6 +117,6 @@ if __name__ == '__main__':
         fig = plt.imshow(postprocess(images[0]))
         for bbox in target[0]['boxes']:
             fig.axes.add_patch(bbox_to_rect(bbox, 'blue'))
-        print(i)
-        i = i+1
-        # plt.pause(1)
+        # print(i)
+        # i = i+1
+        plt.pause(1)

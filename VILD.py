@@ -1,6 +1,6 @@
 from torch.utils.data import dataloader
 from torchvision.models import detection
-from torchvision.models.detection import faster_rcnn
+from torchvision.models.detection import backbone_utils, faster_rcnn
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from MaskRCNN import maskRCNN
 import torch
@@ -17,6 +17,46 @@ import torchvision.models.detection.faster_rcnn
 import nms
 import numpy as np
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def sim(a, b):
+    return (a @ b.T)/(np.linalg.norm(a, ord=1)*np.linalg.norm(b, ord=1))
+
+
+def VILD_image(image, target):
+    # load voc-dataset
+    preprocess = vocDataset.get_transform(False)  # 主要作用是将图片数据转成tensor传入显存
+    postprocess = transforms.ToPILImage()
+    dataset = vocDataset.vocData(
+        "/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
+    loader = torch.utils.data.DataLoader(
+        dataset, batch_size=1, shuffle=False, num_workers=4,
+        collate_fn=utils.collate_fn, pin_memory=True)
+
+    # load faster-rcnn as region proposal network
+    backbone = faster_rcnn.fasterrcnn_resnet50_fpn(pretrained=True)
+    backbone.box_nms_thresh = 0.9
+    backbone.roi_heads.box_predictor = FastRCNNPredictor(1024, 2)
+    backbone.load_state_dict(torch.load("maskrcnn5.pt"))
+    backbone.to(device)
+    backbone.eval()
+
+    # load clip
+    model, preprocess = clip.load('ViT-B/32', device)
+    image_input = preprocess(image).unsqueeze(0).to(device)
+    text_inputs = torch.cat(
+        [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes]).to(device)
+
+    # load resnet as student model
+    torchvision.models.resnet34(pretrained=False)
+
+    with torch.no_grad():
+        image_features = model.encode_image(image_input)
+        text_features = model.encode_text(text_inputs)
+    # for i in range(2):
+    #     for imgs, targets in loader:
+
 
 def get_transform(train):
     transform = []
@@ -31,7 +71,7 @@ def VILD_train():
         "/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
     print(len(dataset))
     loader = torch.utils.data.DataLoader(
-        dataset, batch_size=1, shuffle=True, num_workers=8,
+        dataset, batch_size=1, shuffle=False, num_workers=4,
         collate_fn=utils.collate_fn, pin_memory=True)
 
     num_epochs = 100
@@ -62,8 +102,6 @@ def VILD_train():
             optimizer.zero_grad()
             losses.backward()
             optimizer.step()
-            fig = plt.imshow(postprocess(images[0].cpu()))
-            plt.pause(1)
         if lr_scheduler is not None:
             lr_scheduler.step()
 
@@ -114,8 +152,8 @@ def VILD_evluate():
         ).numpy(), detections[0]['scores'].cpu().detach().numpy(), 0.2)
 
         for bbox, score in zip(bboxes, scores):
-            if score < 0.2:
-                continue
+            # if score < 0.2:
+            #     continue
             fig.axes.add_patch(vocDataset.bbox_to_rect(
                 bbox, 'blue'))
         plt.show()
