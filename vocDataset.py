@@ -101,7 +101,7 @@ class vocData(Dataset):
 
 
 if __name__ == '__main__':
-    preprocess = get_transform(True)
+    preprocess = get_transform(False)
     data = vocData("/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
     loader = torch.utils.data.DataLoader(
         data, batch_size=1, shuffle=False, num_workers=4,
@@ -114,9 +114,14 @@ if __name__ == '__main__':
                   for target in targets]
         plt.cla()
         postprocess = transforms.ToPILImage()
+        box = target[0]['boxes'][0].long()
+        print(box)
+        # images[0] = images[0][:][box[0]:box[2]][box[1]:box[3]]
+        images[0] = images[0][:, box[1]:box[3], box[0]:box[2]]
+        print(images[0].shape)
         fig = plt.imshow(postprocess(images[0]))
-        for bbox in target[0]['boxes']:
-            fig.axes.add_patch(bbox_to_rect(bbox, 'blue'))
+        # for bbox in target[0]['boxes']:
+        #     fig.axes.add_patch(bbox_to_rect(bbox, 'blue'))
         # print(i)
         # i = i+1
         plt.pause(1)

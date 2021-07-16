@@ -7,4 +7,8 @@
 
 > clip
 ## clip模型介绍
-论文中用到了openai开源的clip模型作为teacher model做KD(Knowledge Distillation)，clip由网上收集而来的4亿image-text pairs训练而成，意在将image以及其对应的text分别通过image-encoder和text-encoder映射到一个相互匹配的空间(embeding)，其中image-encoder
+论文中用到了openai开源的clip模型作为teacher model做KD(Knowledge Distillation)，clip由网上收集而来的4亿image-text pairs训练而成，意在将image以及其对应的text分别通过image-encoder和text-encoder映射到一个相互匹配的空间(embedding)，其中image-encoder
+
+## 论文复现过程
+### crop regions
+当目标由一个two stage detector定位之后（代码中使用的是用ResNet-50-FPN作为backbone的单类Faster rcnn）

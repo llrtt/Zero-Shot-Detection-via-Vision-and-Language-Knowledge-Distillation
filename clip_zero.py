@@ -25,6 +25,7 @@ with torch.no_grad():
 print(image_features.shape)
 # Pick the top 5 most similar labels for the image
 image_features /= image_features.norm(dim=-1, keepdim=True)
+print(image_features)
 print(image_features.shape)
 text_features /= text_features.norm(dim=-1, keepdim=True)
 print(text_features.shape)
