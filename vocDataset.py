@@ -85,7 +85,8 @@ class vocData(Dataset):
                 "name")[0].childNodes[0].data])
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         labels = torch.as_tensor(labels, dtype=torch.int64)
-        labels = torch.ones((len(self.imagePath,)), dtype=torch.int64)
+        #种类不明感模型就取消注释
+        # labels = torch.ones((len(self.imagePath,)), dtype=torch.int64)
         image_id = torch.tensor([index])
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
         iscrowd = torch.zeros((len(Objects),), dtype=torch.int64)
@@ -117,6 +118,7 @@ if __name__ == '__main__':
         box = target[0]['boxes'][0].long()
         print(box)
         # images[0] = images[0][:][box[0]:box[2]][box[1]:box[3]]
+        #x,y轴相反
         images[0] = images[0][:, box[1]:box[3], box[0]:box[2]]
         print(images[0].shape)
         fig = plt.imshow(postprocess(images[0]))

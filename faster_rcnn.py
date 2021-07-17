@@ -151,8 +151,8 @@ class FasterRCNN(GeneralizedRCNN):
                  image_mean=None, image_std=None,
                  # RPN parameters
                  rpn_anchor_generator=None, rpn_head=None,
-                 rpn_pre_nms_top_n_train=2000, rpn_pre_nms_top_n_test=50,
-                 rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=50,
+                 rpn_pre_nms_top_n_train=2000, rpn_pre_nms_top_n_test=30,
+                 rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=30,
                  rpn_nms_thresh=0.7,
                  rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
                  rpn_batch_size_per_image=256, rpn_positive_fraction=0.5,
