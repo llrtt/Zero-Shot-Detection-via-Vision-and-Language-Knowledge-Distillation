@@ -44,6 +44,9 @@ class VILD(nn.Module):
         self.region.fc = nn.Linear(512, 512)
         self.region.to(device)
 
+        self.background = torch.rand(1, 512).to(device)
+        self.background.requires_grad = True
+
         self.model, self.preprocess = clip.load('ViT-B/32', device, jit=False)
 
     def VILD_image(self, images):
@@ -66,7 +69,6 @@ class VILD(nn.Module):
         self.proposals[:, :, 3] = self.proposals[:, :, 3] * y_ratio
 
         # proposals1_5 = proposals*1.5
-
         for image, i in zip(images, range(self.proposals.shape[0])):
             self.proposals[i][:, 0] = self.proposals[i][:, 0].clamp(
                 0, image.shape[2]-2)
@@ -121,15 +123,17 @@ class VILD(nn.Module):
         """
         计算每个proposal的标签
         """
-        text_label = torch.zeros([1, 10])
+        text_label = torch.zeros([1, 11])
         for i in range(len(target['labels'])):
             if nms.iot(proposal.to('cpu'), target['boxes'][i]) >= 0.3:
-                text_label[0, target['labels'][i]] = 1
+                text_label[0, target['labels'][i]+1] = 1
         return text_label
 
     def VILD_text(self):
+        """
+        生成text_embedding，训练时只用到VOC数据集中前十个类
+        """
         if self.training:
-            # 生成text_embedding，训练时只用到VOC数据集中前十个类
             text_inputs = torch.cat(
                 [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes[:10]]).to(device)
         else:
@@ -139,44 +143,77 @@ class VILD(nn.Module):
         return text_embedding
 
     def sim(self, a, b):
+        """
+        计算两向量的余弦相似度(cosine simarility)
+        """
         return (a @ b.T)/(torch.linalg.norm(a, ord=1)*torch.linalg.norm(b, ord=1))
 
     def Loss_text(self, text_embedding, region_embedding, targets):
-        print(region_embedding.shape)
-        print(text_embedding.shape)
+        """
+        计算VILD_text的loss，其中background_embedding为1x512的可训练tensor
+            Arguments:
+                text_embedding:由text_encoder输出
+                region_embedding:由经过修改的resnet_18输出，输入为prposals
+                tergets:prposals对应的标签
+            Return:
+                losses:多个proposals的region_embedding和text_embedding之间的损失
+        """
+        # 将backgound_embedding和text_embedding拼接，方便计算
+        text_embedding = torch.cat([self.background, text_embedding], dim=0)
         losses = 0
-        for regions in region_embedding:
-            for region in regions:
+
+        for regions, i in zip(region_embedding, range(targets.shape[0])):
+            for region, j in zip(regions, range(targets.shape[1])):
+                # 计算余弦相似度
                 Zr = self.sim(region.unsqueeze(0), text_embedding.float())
-                loss_t = torch.nn.functional.cross_entropy(
-                    torch.nn.functional.softmax(Zr/0.1, dim=1),)
-                losses += loss_t
+                loss_t = nn.CrossEntropyLoss()
+                if(torch.nonzero(targets[i, j]).shape[0] == 0):
+                    losses += loss_t(Zr, torch.tensor([0]).to(device))
+                else:
+                    losses += loss_t(Zr,
+                                     torch.nonzero(targets[i, j])[0].to(device))
+        return losses
+
+    def Loss_image(self, image_embedding, region_embedding):
+        """
+        计算VILD_image loss,其中image_embedding经过了归一化，但是region_embedding没有，所以要进行归一化之后才能进行相减求一范数
+        """
+        v = torch.linalg.norm(region_embedding, ord=1,
+                              dim=2).unsqueeze(2).repeat([1, 1, 512])
+        loss = image_embedding.to(device) - region_embedding/v
+        return torch.sum(torch.linalg.norm(loss, ord=1, dim=2))
 
     def forward(self, images, targets):
         # backbone已经训练好
         self.backbone.eval().to(device)
+
         # backbone输入应该为image数组
         detection = self.backbone(images)
         self.backbone.to('cpu')
         region_embedding = self.region(
             self.backbone.roi_heads.box_head.features).reshape(2, int(len(self.backbone.roi_heads.box_head.features)/len(images)), 512)
+
         # 训练或者推理时都需要计算text_embedding
         text_embedding = self.VILD_text()
         if self.training:
             self.proposals = torch.stack(
                 [proposal for proposal in self.backbone.proposals])
             images_embedding = self.VILD_image(images)
-            self.Loss_text(text_embedding, region_embedding, targets)
 
             proposal_labels = torch.empty(
-                [self.proposals.shape[0], self.proposals.shape[1], 10])
-                
-            #获取每个proposal对应的one-hot标签
+                [self.proposals.shape[0], self.proposals.shape[1], 11])
+
+            # 获取每个proposal对应的one-hot标签
             for i in range(self.proposals.shape[0]):
-                for p, j in zip(self.proposals[i], self.proposals.shape[1]):
+                for p, j in zip(self.proposals[i], range(self.proposals.shape[1])):
                     proposal_labels[i, j] = self.get_label(
                         p, targets[i], images[i])
-            return self.proposals, region_embedding
+
+            # 计算VILD_text loss 和VILD_image loss
+            loss = self.Loss_text(
+                text_embedding, region_embedding, proposal_labels)
+            loss += self.Loss_image(images_embedding, region_embedding)
+            return loss
 
         return region_embedding
 
@@ -187,7 +224,7 @@ if __name__ == '__main__':
 
     dataset = vocDataset.vocData(
         "/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
-    model0 = VILD()
+    model0 = VILD().to(device)
     model0.train()
 
     image0, target0 = dataset[15]
@@ -199,9 +236,11 @@ if __name__ == '__main__':
     tgt.append(target1)
     img.append(image0.to(device))
     img.append(image1.to(device))
-    model0(img, tgt)
+    loss = model0(img, tgt)
 
     # model0.backbone.roi_heads.box_predictor.box
-    print(tgt)
+    print(loss)
+    loss.backward()
+    print(model0.background.grad)
     # image = VILD_image()
     # print(image.backbone.proposals)

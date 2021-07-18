@@ -23,9 +23,9 @@ def iou(boxes1, boxes2):
 def iot(boxes1, boxes2):
     """
     用于计算proposal和标注框相交面积和标注框面积的比值，以确定proposal的标签
-    Arguments:
-        boxes1:proposal
-        boxes2:标注框
+        Arguments:
+            boxes1:proposal
+            boxes2:标注框
     """
     boxes1 = np.array(boxes1)
     boxes2 = np.array(boxes2)

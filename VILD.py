@@ -28,40 +28,6 @@ def sim(a, b):
     return (a @ b.T)/(np.linalg.norm(a, ord=1)*np.linalg.norm(b, ord=1))
 
 
-def VILD(image, target):
-    # load voc-dataset
-    preprocess = vocDataset.get_transform(False)  # 主要作用是将图片数据转成tensor传入显存
-    postprocess = transforms.ToPILImage()
-    dataset = vocDataset.vocData(
-        "/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
-    loader = torch.utils.data.DataLoader(
-        dataset, batch_size=1, shuffle=False, num_workers=4,
-        collate_fn=utils.collate_fn, pin_memory=True)
-
-    # load faster-rcnn as region proposal network
-    backbone = faster_rcnn.fasterrcnn_resnet50_fpn(pretrained=True)
-    backbone.box_nms_thresh = 0.9
-    backbone.roi_heads.box_predictor = FastRCNNPredictor(1024, 2)
-    backbone.load_state_dict(torch.load("maskrcnn5.pt"))
-    backbone.to(device)
-    backbone.eval()
-
-    # load clip
-    model, preprocess = clip.load('ViT-B/32', device)
-    image_input = preprocess(image).unsqueeze(0).to(device)
-    text_inputs = torch.cat(
-        [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes]).to(device)
-
-    # load resnet as student model
-    student_model = torchvision.models.resnet34(pretrained=False)
-    student_model.fc = nn.Linear(512, 512)
-
-    with torch.no_grad():
-        image_features = model.encode_image(image_input)
-        text_features = model.encode_text(text_inputs)
-    # for i in range(2):
-    #     for imgs, targets in loader:
-
 
 def get_transform(train):
     transform = []
@@ -69,7 +35,7 @@ def get_transform(train):
     return transforms.Compose(transform)
 
 
-def VILD_train():
+def faster_rcnn_train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     preprocess = vocDataset.get_transform(True)  # 主要作用是将图片数据转成tensor传入显存
     dataset = vocDataset.vocData(
@@ -130,7 +96,7 @@ def VILD_train():
         torch.save(model.state_dict(), 'maskrcnn5.pt')
 
 
-def VILD_evluate():
+def faster_rcnn_evluate():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = faster_rcnn.fasterrcnn_resnet50_fpn(pretrained=True)
     model.box_nms_thresh = 0.9
@@ -206,29 +172,3 @@ if __name__ == '__main__':
         #     bbox, 'blue'))
         plt.pause(1)
 
-    # cifar100 = CIFAR100(root=os.path.expanduser("~/.cache"), download=True, train=False)
-
-    # Prepare the inputs
-    # image_input=preprocess(
-    #     model0.backbone.roi_heads.box_head.features[1]).unsqueeze(0).to(device)
-    # text_inputs=torch.cat(
-    #     [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes]).to(device)
-
-    # # Calculate features
-    # with torch.no_grad():
-    #     image_features=model.encode_image(image_input)
-    #     text_features=model.encode_text(text_inputs)
-    # print(image_features.shape)
-    # # Pick the top 5 most similar labels for the image
-    # image_features /= image_features.norm(dim = -1, keepdim = True)
-    # print(image_features.shape)
-    # text_features /= text_features.norm(dim = -1, keepdim = True)
-    # print(text_features.shape)
-    # similarity=(100.0 * image_features @ text_features.T).softmax(dim = -1)
-    # print(similarity.shape)
-    # values, indices=similarity[0].topk(5)
-
-    # # Print the result
-    # print("\nTop predictions:\n")
-    # for value, index in zip(values, indices):
-    #     print(f"{vocDataset.classes[index]:>16s}: {100 * value.item():.2f}%")
