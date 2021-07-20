@@ -47,13 +47,24 @@ class vocData(Dataset):
         self.transform = transform
         self.target_transform = target_transform
 
-        file = open(self.ImageSets+'/Main/train_train.txt', 'r+')
+        file = open(self.ImageSets+'/Main/bicycle_train.txt', 'r+')
         lines = [each for each in file.readlines()]
         self.imagePath = [self.JPEGImages + '/' + each.split(
             " ")[0]+'.jpg' for each in lines]
         self.hasObject = [each.split(" ")[1].strip() for each in lines]
         self.xmlPath = [self.Annotations + '/' + each.split(
             " ")[0]+'.xml' for each in lines]
+        # 筛选没有目标的图片
+        # imagePath = []
+        # xmlPath = []
+        # for has, image, xml in zip(self.hasObject, self.imagePath, self.xmlPath):
+        #     if has == '-1':
+        #         continue
+        #     else:
+        #         imagePath.append(image)
+        #         xmlPath.append(xml)
+        # self.imagePath = imagePath
+        # self.xmlPath = xmlPath
         file.close()
 
     def __len__(self):
@@ -80,15 +91,20 @@ class vocData(Dataset):
                 "xmax")[0].childNodes[0].data)
             ymax = int(bndboxes[0].getElementsByTagName(
                 "ymax")[0].childNodes[0].data)
+            if names[Object.getElementsByTagName("name")[0].childNodes[0].data] >= 10:
+                continue
             boxes.append([xmin, ymin, xmax, ymax])
             labels.append(names[Object.getElementsByTagName(
                 "name")[0].childNodes[0].data])
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         labels = torch.as_tensor(labels, dtype=torch.int64)
-        #种类不明感模型就取消注释
+        # 种类不敏感模型就取消注释
         # labels = torch.ones((len(self.imagePath,)), dtype=torch.int64)
         image_id = torch.tensor([index])
-        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+        if(int(len(boxes)) == 0):
+            area = 0
+        else:
+            area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
         iscrowd = torch.zeros((len(Objects),), dtype=torch.int64)
         target = {}
         target["boxes"] = boxes
@@ -115,15 +131,16 @@ if __name__ == '__main__':
                   for target in targets]
         plt.cla()
         postprocess = transforms.ToPILImage()
-        box = target[0]['boxes'][0].long()
-        print(box)
         # images[0] = images[0][:][box[0]:box[2]][box[1]:box[3]]
-        #x,y轴相反
-        images[0] = images[0][:, box[1]:box[3], box[0]:box[2]]
-        print(images[0].shape)
+        # x,y轴相反
+        # images[0] = images[0][:, box[1]:box[3], box[0]:box[2]]
+        # print(images[0].shape)
         fig = plt.imshow(postprocess(images[0]))
-        # for bbox in target[0]['boxes']:
-        #     fig.axes.add_patch(bbox_to_rect(bbox, 'blue'))
+        print(targets[0]["boxes"])
+        if(int(len(targets[0]["boxes"])) != 0):
+            box = target[0]['boxes'][0].long()
+            for bbox in target[0]['boxes']:
+                fig.axes.add_patch(bbox_to_rect(bbox, 'blue'))
         # print(i)
         # i = i+1
         plt.pause(1)
