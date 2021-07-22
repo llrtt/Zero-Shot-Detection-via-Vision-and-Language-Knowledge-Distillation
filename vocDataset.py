@@ -91,7 +91,7 @@ class vocData(Dataset):
                 "xmax")[0].childNodes[0].data)
             ymax = int(bndboxes[0].getElementsByTagName(
                 "ymax")[0].childNodes[0].data)
-            if names[Object.getElementsByTagName("name")[0].childNodes[0].data] >= 10:
+            if names[Object.getElementsByTagName("name")[0].childNodes[0].data] >= 2:
                 continue
             boxes.append([xmin, ymin, xmax, ymax])
             labels.append(names[Object.getElementsByTagName(

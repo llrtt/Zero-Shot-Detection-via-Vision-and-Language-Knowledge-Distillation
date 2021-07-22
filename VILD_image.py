@@ -17,7 +17,7 @@ import nms
 import utils
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-train_class = 10
+train_class = 2
 
 
 class VILD(nn.Module):
@@ -41,10 +41,11 @@ class VILD(nn.Module):
         self.backbone.roi_heads.box_head = box_head
         self.backbone.eval().to(device)
 
-        self.region = backbone_utils.resnet.resnet18()
-        self.region.conv1 = nn.Conv2d(256, 64, kernel_size=(
-            7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.region.fc = nn.Linear(512, 512)
+        # self.region = backbone_utils.resnet.resnet18(pretrained=True)
+        # self.region.conv1 = nn.Conv2d(256, 64, kernel_size=(
+        #     7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.region = nn.Sequential(nn.Conv2d(256, 64, kernel_size=(
+            3, 3), stride=1, padding=(3, 3), bias=False), nn.Flatten(), nn.Linear(7744, 512))
         self.region.to(device)
 
         self.background = nn.Parameter(torch.rand(1, 512))
@@ -82,7 +83,6 @@ class VILD(nn.Module):
                 0, image.shape[1]-2)
         self.proposals = self.proposals.long()
 
-
         # 将变换后的proposals输入clip获得50x512的image_embedding
         postprocess = transforms.ToPILImage()
         image_embeddings = torch.empty(
@@ -108,7 +108,7 @@ class VILD(nn.Module):
         """
         text_label = torch.zeros([1, train_class+1])
         for i in range(len(target['labels'])):
-            if nms.iot(proposal.to('cpu'), target['boxes'][i]) >= 0.3:
+            if nms.iot(proposal.to('cpu'), target['boxes'][i]) >= 0.2:
                 text_label[0, target['labels'][i]+1] = 1
         return text_label
 
@@ -153,7 +153,7 @@ class VILD(nn.Module):
                 print("label:{}".format(targets[i, j]))
                 loss_t = nn.CrossEntropyLoss()
                 if(torch.nonzero(targets[i, j]).shape[0] == 0):
-                    losses += 0.2*loss_t(Zr/5, torch.tensor([0]).to(device))
+                    losses += loss_t(Zr/5, torch.tensor([0]).to(device))
                 else:
                     losses += loss_t(Zr/5,
                                      torch.nonzero(targets[i, j])[0].to(device))
@@ -202,10 +202,10 @@ class VILD(nn.Module):
         self.proposals, region_embedding = self.filter_proposals(
             self.proposals, region_embedding)
         self.proposals = torch.stack(
-            [proposal for proposal in self.proposals]).unsqueeze(0)
+            [proposal for proposal in self.proposals]).unsqueeze(0).repeat([int(len(images)), 1, 1])
         region_embedding = torch.stack(
-            [reg for reg in region_embedding]).unsqueeze(0)
-        
+            [reg for reg in region_embedding]).unsqueeze(0).repeat([int(len(images)), 1, 1])
+
         # 训练或者推理时都需要计算text_embedding
         text_embedding = self.VILD_text(model)
         if self.training:
@@ -224,7 +224,7 @@ class VILD(nn.Module):
                 text_embedding, region_embedding, proposal_labels)
             loss += 0.5*self.Loss_image(images_embedding, region_embedding)
             avg_losses = loss / len(self.backbone.roi_heads.box_head.features)
-            return avg_losses
+            return avg_losses, loss
 
         return region_embedding
 
@@ -249,13 +249,24 @@ if __name__ == '__main__':
 
     # 将需要训练的参数输入优化器中
     optimizer = torch.optim.SGD(
-        params, lr=0.006, momentum=0.8, weight_decay=0.001)
+        params, lr=0.0006, momentum=0.8, weight_decay=0.001)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                    step_size=500,
                                                    gamma=0.9)
 
     model0.to(device)
     num_epoch = 2
+    params = list(p for p in model0.region.parameters() if p.requires_grad)
+    print(model0.region)
+    k = 0
+    for i in params:
+        l = 1
+        print("该层的结构：" + str(list(i.size())))
+        for j in i.size():
+            l *= j
+        # print("该层参数和：" + str(l))
+        k = k + l
+    print("总参数数量和：" + str(k))
 
     # 训练开始
     for i in range(num_epoch):
@@ -265,13 +276,28 @@ if __name__ == '__main__':
                 continue
             target = [{k: v for k, v in target.items()}
                       for target in targets]
-            losses = model0(images, target)
-            print('epoch:{} loss:{}'.format(i, losses))
+            avg_loss, losses = model0(images, target)
+            print(losses)
+            print('epoch:{} loss:{}'.format(i, avg_loss))
+            # print(model0.region)
+            # k = 0
+            # for i in params:
+            #     l = 1
+            #     print("该层的结构：" + str(list(i.size())))
+            #     print(i.grad)
+            #     for j in i.size():
+            #         l *= j
+            #     print("该层参数和：" + str(l))
+            #     k = k + l
+            # print("总参数数量和：" + str(k))
             # print(model0.backbone.backbone.state_dict())
             optimizer.zero_grad()
             losses.backward()
             optimizer.step()
             lr_scheduler.step()
+            # postprocess = transforms.ToPILImage()
+            # plt.imshow(postprocess(images[0].to('cpu')))
+            # plt.pause(1)
             # if j % 30 ==0:
 
         torch.save(model0.state_dict(), 'VILD.pt')

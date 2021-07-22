@@ -101,13 +101,12 @@ def faster_rcnn_evluate():
     model = faster_rcnn.fasterrcnn_resnet50_fpn(pretrained=True)
     model.box_nms_thresh = 0.9
     model.roi_heads.box_predictor = FastRCNNPredictor(1024, 2)
-    model.load_state_dict(torch.load("maskrcnn5.pt"))
+    
     model.to(device)
     model.eval()
 
     preprocess = vocDataset.get_transform(False)  # 主要作用是将图片数据转成tensor传入显存
     postprocess = transforms.ToPILImage()
-
     dataset = vocDataset.vocData(
         "/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
     for i in range(100):
