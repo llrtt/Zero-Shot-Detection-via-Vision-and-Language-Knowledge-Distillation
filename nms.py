@@ -20,6 +20,7 @@ def iou(boxes1, boxes2):
     iou = inter/ovr
     return iou
 
+
 def iot(boxes1, boxes2):
     """
     用于计算proposal和标注框相交面积和标注框面积的比值，以确定proposal的标签
@@ -42,7 +43,8 @@ def iot(boxes1, boxes2):
     iou = inter/area2
     return iou
 
-def nms(boxes, scores, thresh):
+
+def nms(boxes, scores, thresh=0.3):
     order = np.argsort(-1*scores)  # scores降序排列,order元素对应scores里面的索引
     keep = []
     j = 0
@@ -58,7 +60,7 @@ def nms(boxes, scores, thresh):
         order = np.delete(order, toDelete)
         scores = np.delete(scores, toDelete)
         j = j+1
-    return keep,scores
+    return keep, scores
 
 
 if __name__ == '__main__':

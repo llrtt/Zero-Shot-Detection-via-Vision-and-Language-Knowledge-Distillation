@@ -21,8 +21,16 @@ train_class = 2
 
 
 class VILD(nn.Module):
-    def __init__(self):
+    """
+    Arguments:
+        train_calss:训练时用到的类的数目，推理时用到全部类别
+        iot_thresh:用于计算prposals对应label的阈值
+    """
+
+    def __init__(self, train_class=2, iot_thresh=0.3):
         super(VILD, self).__init__()
+        self.train_class = train_class
+        self.iot_thresh = iot_thresh
 
         self.backbone = faster_rcnn.fasterrcnn_resnet50_fpn(pretrained=True)
         self.backbone.box_nms_thresh = 0.9
@@ -39,20 +47,14 @@ class VILD(nn.Module):
         box_head.fc7 = self.backbone.roi_heads.box_head.fc7
 
         self.backbone.roi_heads.box_head = box_head
-        self.backbone.eval().to(device)
 
-        # self.region = backbone_utils.resnet.resnet18(pretrained=True)
-        # self.region.conv1 = nn.Conv2d(256, 64, kernel_size=(
-        #     7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        # 用简单的卷积加全连接层做生成region_embedding
         self.region = nn.Sequential(nn.Conv2d(256, 64, kernel_size=(
             3, 3), stride=1, padding=(3, 3), bias=False), nn.Flatten(), nn.Linear(7744, 512))
-        self.region.to(device)
 
         self.background = nn.Parameter(torch.rand(1, 512))
-        self.background.requires_grad = True
 
-    def VILD_image(self, images, model, preprocess):
-
+    def process_proposals(self, images):
         # 获得变换之后的图片和原图的尺寸比例
         image_sizes = torch.tensor(
             self.backbone.transform(images)[0].image_sizes)
@@ -65,13 +67,12 @@ class VILD(nn.Module):
         y_ratio = y_ratio.unsqueeze(1).repeat(
             [1, self.proposals.shape[1]]).to(device)
 
-        # 将proposal变换为原来的图片对应的尺寸及1.5倍原来尺寸
+        # 将proposal变换为原来的图片对应的尺寸
         self.proposals[:, :, 0] = self.proposals[:, :, 0] * x_ratio
         self.proposals[:, :, 1] = self.proposals[:, :, 1] * y_ratio
         self.proposals[:, :, 2] = self.proposals[:, :, 2] * x_ratio
         self.proposals[:, :, 3] = self.proposals[:, :, 3] * y_ratio
 
-        # proposals1_5 = proposals*1.5
         for image, i in zip(images, range(self.proposals.shape[0])):
             self.proposals[i][:, 0] = self.proposals[i][:, 0].clamp(
                 0, image.shape[2]-2)
@@ -83,6 +84,7 @@ class VILD(nn.Module):
                 0, image.shape[1]-2)
         self.proposals = self.proposals.long()
 
+    def VILD_image(self, images, model, preprocess):
         # 将变换后的proposals输入clip获得50x512的image_embedding
         postprocess = transforms.ToPILImage()
         image_embeddings = torch.empty(
@@ -106,9 +108,9 @@ class VILD(nn.Module):
         """
         计算每个proposal的标签
         """
-        text_label = torch.zeros([1, train_class+1])
+        text_label = torch.zeros([1, self.train_class+1])
         for i in range(len(target['labels'])):
-            if nms.iot(proposal.to('cpu'), target['boxes'][i]) >= 0.2:
+            if nms.iot(proposal.to('cpu'), target['boxes'][i]) >= self.iot_thresh:
                 text_label[0, target['labels'][i]+1] = 1
         return text_label
 
@@ -118,10 +120,10 @@ class VILD(nn.Module):
         """
         if self.training:
             text_inputs = torch.cat(
-                [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes[:train_class]]).to(device)
+                [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes[:self.train_class]]).to(device)
         else:
             text_inputs = torch.cat(
-                [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes[:]]).to(device)
+                [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes[:self.train_class]]).to(device)
         text_embedding = model.encode_text(text_inputs)
         return text_embedding
 
@@ -149,8 +151,8 @@ class VILD(nn.Module):
             for region, j in zip(regions, range(targets.shape[1])):
                 # 计算余弦相似度
                 Zr = self.sim(region.unsqueeze(0), text_embedding.float())
-                print("region:{}".format(nn.functional.softmax(Zr)))
-                print("label:{}".format(targets[i, j]))
+                # print("region:{}".format(nn.functional.softmax(Zr)))
+                # print("label:{}".format(targets[i, j]))
                 loss_t = nn.CrossEntropyLoss()
                 if(torch.nonzero(targets[i, j]).shape[0] == 0):
                     losses += loss_t(Zr/5, torch.tensor([0]).to(device))
@@ -170,7 +172,7 @@ class VILD(nn.Module):
 
     def filter_proposals(self, proposals, region_embedding):
         """
-        筛选掉部分proposals
+        训练前筛选掉部分proposals
         """
         pro = []
         reg = []
@@ -185,16 +187,69 @@ class VILD(nn.Module):
                 reg.append(region_embedding[i, j])
         return pro, reg
 
+    def filter_result(self, result):
+        """
+        筛除背景概率较大的proposal
+        """
+        pro = []
+        res = []
+        all_classes = []
+        all_classes_pre = []
+        for i in range(int(self.proposals.shape[0])):
+            all_classes.append([])
+            for j in range(self.train_class+1):
+                all_classes[i].append([])
+
+        for i in range(int(self.proposals.shape[0])):
+            all_classes_pre.append([])
+            for j in range(self.train_class+1):
+                all_classes_pre[i].append([])
+
+        for proposals, reses in zip(self.proposals, result):
+            p_s = []
+            res_s = []
+            for p, r in zip(proposals, reses):
+                if(r[0][0] >= 0.05):
+                    continue
+                else:
+                    p_s.append(p)
+                    res_s.append(r)
+            pro.append(p_s)
+            res.append(res_s)
+
+        # 将proposals分类，依据是result中概率最大对应的数组下标
+        for p, r, i in zip(pro, res, range(int(self.proposals.shape[0]))):
+            for p_s, r_s in zip(p, r):
+                val, ind = r_s.max(1)
+                all_classes[i][ind.long()].append([b.item()
+                                                   for b in p_s.cpu().detach()])
+                all_classes_pre[i][ind.long()].append(
+                    val[0].cpu().detach().item())
+        # 对每类proposal进行NMS
+        for i in range(int(self.proposals.shape[0])):
+            for j in range(self.train_class+1):
+                all_classes[i][j], all_classes_pre[i][j] = nms.nms(
+                    np.array(all_classes[i][j]), np.array(all_classes_pre[i][j]))
+
+        return all_classes, all_classes_pre
+
     def forward(self, images, targets):
+        """
+        Arguments:
+            images:tensor([num_images,3,height,width])
+            targets:由vocDataset输出的标注
+        """
+        # 冻结backbone的参数
         self.backbone.eval()
         # 加载clip模型
         model, preprocess = clip.load('ViT-B/32', device, jit=False)
 
         # backbone输入应该为image数组
         detection = self.backbone(images)
-        print(len(self.backbone.roi_heads.box_head.features))
         self.proposals = torch.stack(
             [proposal for proposal in self.backbone.proposals])
+
+        # 将ROIalign之后的features输入网络生成region_embedding
         region_embedding = self.region(
             self.backbone.roi_heads.box_head.features).reshape(int(len(images)), int(len(self.backbone.roi_heads.box_head.features)/len(images)), 512)
 
@@ -205,13 +260,14 @@ class VILD(nn.Module):
             [proposal for proposal in self.proposals]).unsqueeze(0).repeat([int(len(images)), 1, 1])
         region_embedding = torch.stack(
             [reg for reg in region_embedding]).unsqueeze(0).repeat([int(len(images)), 1, 1])
+        self.process_proposals(images)
 
         # 训练或者推理时都需要计算text_embedding
         text_embedding = self.VILD_text(model)
         if self.training:
             images_embedding = self.VILD_image(images, model, preprocess)
             proposal_labels = torch.empty(
-                [self.proposals.shape[0], self.proposals.shape[1], train_class+1])
+                [self.proposals.shape[0], self.proposals.shape[1], self.train_class+1])
 
             # 获取每个proposal对应的one-hot标签
             for i in range(self.proposals.shape[0]):
@@ -223,16 +279,31 @@ class VILD(nn.Module):
             loss = self.Loss_text(
                 text_embedding, region_embedding, proposal_labels)
             loss += 0.5*self.Loss_image(images_embedding, region_embedding)
+
+            # 单个proposal的平均loss,去除了proposals数量不同的影响
             avg_losses = loss / len(self.backbone.roi_heads.box_head.features)
             return avg_losses, loss
 
-        return region_embedding
+        # 计算分类结果
+        result = []
+        text_embedding = torch.cat([self.background, text_embedding], dim=0)
+        for regions in region_embedding:
+            r = []
+            for region in regions:
+                # 计算余弦相似度
+                Zr = self.sim(region.unsqueeze(0), text_embedding.float())
+                r.append(nn.functional.softmax(Zr))
+            result.append(r)
+
+        # 筛除背景
+        self.proposals, result = self.filter_result(result)
+
+        return result, self.proposals
 
 
-if __name__ == '__main__':
+def VILD_train(epoch=2, train_class=2, pretrain=False):
     # 主要作用是将图片数据转成tensor传入显存
     preprocess = vocDataset.get_transform(False)
-    postprocess = transforms.ToPILImage()
 
     # 加载数据
     dataset = vocDataset.vocData(
@@ -240,12 +311,17 @@ if __name__ == '__main__':
     loader = torch.utils.data.DataLoader(
         dataset, batch_size=1, shuffle=False, num_workers=4,
         collate_fn=utils.collate_fn, pin_memory=True)
-    model0 = VILD().to(device)
-    # model0.load_state_dict(torch.load("VILD.pt"))
-    for p in model0.backbone.parameters():
+
+    # 加载模型
+    model = VILD(train_class)
+    if pretrain:
+        model.load_state_dict(torch.load("VILD.pt"))
+    for p in model.backbone.parameters():
         p.requires_grad = False
-    params = [p for p in model0.parameters() if p.requires_grad]
-    model0.train()
+
+    # 提取出可训练参数
+    params = [p for p in model.parameters() if p.requires_grad]
+    model.train()
 
     # 将需要训练的参数输入优化器中
     optimizer = torch.optim.SGD(
@@ -254,50 +330,64 @@ if __name__ == '__main__':
                                                    step_size=500,
                                                    gamma=0.9)
 
-    model0.to(device)
-    num_epoch = 2
-    params = list(p for p in model0.region.parameters() if p.requires_grad)
-    print(model0.region)
-    k = 0
-    for i in params:
-        l = 1
-        print("该层的结构：" + str(list(i.size())))
-        for j in i.size():
-            l *= j
-        # print("该层参数和：" + str(l))
-        k = k + l
-    print("总参数数量和：" + str(k))
+    model.to(device)
 
     # 训练开始
-    for i in range(num_epoch):
+    for i in range(epoch):
         for imgs, targets in loader:
             images = list([img.to(device) for img in imgs])
-            if(int(len(images)) == 0 or int(len(targets[0]["boxes"])) == 0):
-                continue
             target = [{k: v for k, v in target.items()}
                       for target in targets]
-            avg_loss, losses = model0(images, target)
-            print(losses)
-            print('epoch:{} loss:{}'.format(i, avg_loss))
-            # print(model0.region)
-            # k = 0
-            # for i in params:
-            #     l = 1
-            #     print("该层的结构：" + str(list(i.size())))
-            #     print(i.grad)
-            #     for j in i.size():
-            #         l *= j
-            #     print("该层参数和：" + str(l))
-            #     k = k + l
-            # print("总参数数量和：" + str(k))
-            # print(model0.backbone.backbone.state_dict())
+
+            # 防止images为空导致训练出错
+            if(int(len(images)) == 0 or int(len(targets[0]["boxes"])) == 0):
+                continue
+            avg_loss, losses = model(images, target)
+            print('epoch:{} sum_loss:{} avg_loss'.format(i, avg_loss, avg_loss))
             optimizer.zero_grad()
             losses.backward()
             optimizer.step()
             lr_scheduler.step()
-            # postprocess = transforms.ToPILImage()
-            # plt.imshow(postprocess(images[0].to('cpu')))
-            # plt.pause(1)
-            # if j % 30 ==0:
 
-        torch.save(model0.state_dict(), 'VILD.pt')
+        torch.save(model.state_dict(), 'VILD.pt')
+    print('-------------------------------------------train complete------------------------------------------------')
+
+
+def VILD_eval(model_path="VILD.pt"):
+    # 主要作用是将图片数据转成tensor传入显存
+    preprocess = vocDataset.get_transform(False)
+    postprocess = transforms.ToPILImage()
+    # 加载数据
+    dataset = vocDataset.vocData(
+        "/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
+    loader = torch.utils.data.DataLoader(
+        dataset, batch_size=1, shuffle=False, num_workers=4,
+        collate_fn=utils.collate_fn, pin_memory=True)
+
+    # 加载模型
+    model = VILD(train_class)
+    model.load_state_dict(torch.load(model_path))
+    model.to(device)
+    model.eval()
+
+    for imgs, targets in loader:
+        images = list([img.to(device) for img in imgs])
+        target = [{k: v for k, v in target.items()}
+                  for target in targets]
+
+        # 防止images为空导致出错
+        if(int(len(images)) == 0 or int(len(targets[0]["boxes"])) == 0):
+            continue
+        plt.cla()
+        fig = plt.imshow(postprocess(images[0].to('cpu')))
+        result, proposals = model(images, target)
+        for p, r in zip(proposals, result):
+            for pro, re in zip(p, r):
+                for bbox, core in zip(pro, re):
+                    fig.axes.add_patch(
+                        vocDataset.bbox_to_rect(bbox, 'blue'))
+        plt.pause(1)
+
+
+if __name__ == '__main__':
+    VILD_eval()
