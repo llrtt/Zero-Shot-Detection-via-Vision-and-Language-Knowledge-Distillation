@@ -17,7 +17,6 @@ import nms
 import utils
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-train_class = 2
 
 
 class VILD(nn.Module):
@@ -36,7 +35,7 @@ class VILD(nn.Module):
         self.backbone.box_nms_thresh = 0.9
         self.backbone.roi_heads.box_predictor = Modified.FastRCNNPredictor(
             1024, 2)
-        self.backbone.load_state_dict(torch.load("maskrcnn5.pt"))
+        self.backbone.load_state_dict(torch.load("maskrcnn4.pt"))
 
         box_head = Modified.TwoMLPHead(
             self.backbone.backbone.out_channels *
@@ -151,14 +150,17 @@ class VILD(nn.Module):
             for region, j in zip(regions, range(targets.shape[1])):
                 # 计算余弦相似度
                 Zr = self.sim(region.unsqueeze(0), text_embedding.float())
-                # print("region:{}".format(nn.functional.softmax(Zr)))
-                # print("label:{}".format(targets[i, j]))
+                print("region:{}".format(nn.functional.softmax(Zr)))
+                print("label:{}".format(targets[i, j]))
                 loss_t = nn.CrossEntropyLoss()
                 if(torch.nonzero(targets[i, j]).shape[0] == 0):
-                    losses += loss_t(Zr/5, torch.tensor([0]).to(device))
-                else:
+                    losses += 0.5*loss_t(Zr/5, torch.tensor([0]).to(device))
+                    continue
+                if(torch.nonzero(targets[i, j]).shape[0] == 1):
                     losses += loss_t(Zr/5,
                                      torch.nonzero(targets[i, j])[0].to(device))
+                else:
+                    losses += 0
         return losses
 
     def Loss_image(self, image_embedding, region_embedding):
@@ -343,7 +345,7 @@ def VILD_train(epoch=2, train_class=2, pretrain=False):
             if(int(len(images)) == 0 or int(len(targets[0]["boxes"])) == 0):
                 continue
             avg_loss, losses = model(images, target)
-            print('epoch:{} sum_loss:{} avg_loss'.format(i, avg_loss, avg_loss))
+            print('epoch:{} sum_loss:{} avg_loss:{}'.format(i, avg_loss, avg_loss))
             optimizer.zero_grad()
             losses.backward()
             optimizer.step()
@@ -353,7 +355,7 @@ def VILD_train(epoch=2, train_class=2, pretrain=False):
     print('-------------------------------------------train complete------------------------------------------------')
 
 
-def VILD_eval(model_path="VILD.pt"):
+def VILD_eval(model_path="VILD.pt", train_class=2):
     # 主要作用是将图片数据转成tensor传入显存
     preprocess = vocDataset.get_transform(False)
     postprocess = transforms.ToPILImage()
@@ -382,6 +384,8 @@ def VILD_eval(model_path="VILD.pt"):
         fig = plt.imshow(postprocess(images[0].to('cpu')))
         result, proposals = model(images, target)
         for p, r in zip(proposals, result):
+            print('proposals:{}'.format(p[2]))
+            print('result:{}'.format(r[2]))
             for pro, re in zip(p, r):
                 for bbox, core in zip(pro, re):
                     fig.axes.add_patch(
@@ -390,4 +394,4 @@ def VILD_eval(model_path="VILD.pt"):
 
 
 if __name__ == '__main__':
-    VILD_eval()
+    VILD_train(train_class=2)

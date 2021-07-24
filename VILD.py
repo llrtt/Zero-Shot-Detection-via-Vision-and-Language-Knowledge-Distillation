@@ -37,7 +37,7 @@ def get_transform(train):
 
 def faster_rcnn_train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    preprocess = vocDataset.get_transform(True)  # 主要作用是将图片数据转成tensor传入显存
+    preprocess = vocDataset.get_transform(False)  # 主要作用是将图片数据转成tensor传入显存
     dataset = vocDataset.vocData(
         "/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
     print(len(dataset))
@@ -63,9 +63,10 @@ def faster_rcnn_train():
     for i in range(num_epochs):
         model.train()
         for (imgs, targets), j in zip(loader, range(len(dataset))):
+            if(int(len(imgs)) == 0 or int(len(targets[0]["boxes"])) == 0):
+                continue
             images = list([img.to(device) for img in imgs])
-            target = [{k: v.to(device) for k, v in target.items()}
-                      for target in targets]
+            target = [{k: v.to(device) for k, v in target.items()}for target in targets]
             loss_dict = model(images, target)
             losses = sum(loss for loss in loss_dict.values())
             print("epoch:{i} iteration:{j} loss:{losses}".format(
@@ -93,7 +94,7 @@ def faster_rcnn_train():
             # fig.axes.add_patch(vocDataset.bbox_to_rect(
             #     target['boxes'][1].cpu().detach(), 'blue'))
         plt.pause(1)
-        torch.save(model.state_dict(), 'maskrcnn5.pt')
+        torch.save(model.state_dict(), 'maskrcnn4.pt')
 
 
 def faster_rcnn_evluate():
@@ -130,44 +131,45 @@ def faster_rcnn_evluate():
 
 
 if __name__ == '__main__':
-    preprocess = vocDataset.get_transform(False)  # 主要作用是将图片数据转成tensor传入显存
-    postprocess = transforms.ToPILImage()
+    faster_rcnn_train()
+    # preprocess = vocDataset.get_transform(False)  # 主要作用是将图片数据转成tensor传入显存
+    # postprocess = transforms.ToPILImage()
 
-    dataset = vocDataset.vocData(
-        "/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
-    model0 = VILD_image.VILD_image()
-    model0.eval()
+    # dataset = vocDataset.vocData(
+    #     "/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
+    # model0 = VILD_image.VILD_image()
+    # model0.eval()
 
-    image0, target = dataset[0]
-    img = []
-    img.append(image0.to(device))
-    model0(img)
+    # image0, target = dataset[0]
+    # img = []
+    # img.append(image0.to(device))
+    # model0(img)
 
-    # model0.backbone.roi_heads.box_predictor.box
-    print(len(model0.backbone.proposals[0]))
-    print(target)
+    # # model0.backbone.roi_heads.box_predictor.box
+    # print(len(model0.backbone.proposals[0]))
+    # print(target)
 
-    model, preprocess = clip.load('ViT-B/32', device)
-    print(model.input_resolution.item())
-    # print(image0.shape)
-    # target = [{k: v.to(device) for k, v in target.items()}]
-    images = model0.backbone.transform(img)
-    print(images[0].image_sizes)
+    # model, preprocess = clip.load('ViT-B/32', device)
+    # print(model.input_resolution.item())
+    # # print(image0.shape)
+    # # target = [{k: v.to(device) for k, v in target.items()}]
+    # images = model0.backbone.transform(img)
+    # print(images[0].image_sizes)
 
-    x_ratio = image0.shape[1]/images[0].image_sizes[0][0]
-    y_ratio = image0.shape[2]/images[0].image_sizes[0][1]
+    # x_ratio = image0.shape[1]/images[0].image_sizes[0][0]
+    # y_ratio = image0.shape[2]/images[0].image_sizes[0][1]
 
-    fig = plt.imshow(postprocess(image0))
-    for bbox in (model0.backbone.proposals[0]):
-        print(bbox)
-        image1 = image0[0][:, bbox[1]:bbox[3], bbox[0]:bbox[2]]
-        bbox[0] = bbox[0] * x_ratio
-        bbox[1] = bbox[1] * y_ratio
-        bbox[2] = bbox[2] * x_ratio
-        bbox[3] = bbox[3] * y_ratio
-        print(bbox)
-        plt.imshow(postprocess(image0))
-        # fig.axes.add_patch(vocDataset.bbox_to_rect(
-        #     bbox, 'blue'))
-        plt.pause(1)
+    # fig = plt.imshow(postprocess(image0))
+    # for bbox in (model0.backbone.proposals[0]):
+    #     print(bbox)
+    #     image1 = image0[0][:, bbox[1]:bbox[3], bbox[0]:bbox[2]]
+    #     bbox[0] = bbox[0] * x_ratio
+    #     bbox[1] = bbox[1] * y_ratio
+    #     bbox[2] = bbox[2] * x_ratio
+    #     bbox[3] = bbox[3] * y_ratio
+    #     print(bbox)
+    #     plt.imshow(postprocess(image0))
+    #     # fig.axes.add_patch(vocDataset.bbox_to_rect(
+    #     #     bbox, 'blue'))
+    #     plt.pause(1)
 
