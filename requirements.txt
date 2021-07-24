@@ -1,0 +1,9 @@
+torchvision==0.8.2
+matplotlib==3.4.2
+clip==1.0
+numpy==1.20.2
+lxml==4.6.3
+torch==1.7.1
+MaskRCNN==0.0.1
+Pillow==8.3.1
+utils==1.0.1

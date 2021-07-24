@@ -10,8 +10,10 @@ import xml.dom.minidom as dom
 import matplotlib.pyplot as plt
 import torchvision.transforms as transforms
 
+
 def collate_fn(batch):
     return tuple(zip(*batch))
+
 
 classes = ["aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow",
            "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"]
@@ -119,7 +121,8 @@ class vocData(Dataset):
 
 if __name__ == '__main__':
     preprocess = get_transform(False)
-    data = vocData(data_path="/home/llrt/文档/VOCdevkit/VOC2012", transform=preprocess)
+    data = vocData(data_path="/home/llrt/文档/VOCdevkit/VOC2012",
+                   transform=preprocess)
     loader = torch.utils.data.DataLoader(
         data, batch_size=1, shuffle=False, num_workers=4,
         collate_fn=collate_fn)

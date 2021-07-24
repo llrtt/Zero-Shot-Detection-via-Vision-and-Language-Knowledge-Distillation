@@ -1,5 +1,5 @@
 import vocDataset
-from VILD_image import VILD
+from VILD import VILD
 import matplotlib.pyplot as plt
 import torch
 import torchvision.transforms as transforms
@@ -16,7 +16,7 @@ def VILD_train(epoch=2, train_class=2, pretrain=False, dataset_path="/home/llrt/
 
     # 加载数据
     dataset = vocDataset.vocData(
-        dataset_path, train_class, transform=preprocess)
+        data_path=dataset_path, train_class=train_class, transform=preprocess)
     loader = torch.utils.data.DataLoader(
         dataset, batch_size=1, shuffle=False, num_workers=4,
         collate_fn=collate_fn, pin_memory=True)
@@ -69,7 +69,7 @@ def VILD_eval(model_path="VILD.pt", train_class=2, dataset_path="/home/llrt/文�
     postprocess = transforms.ToPILImage()
     # 加载数据
     dataset = vocDataset.vocData(
-        data_path=dataset_path, train_class=train_class, transform=preprocess)
+        train_class=train_class, data_path=dataset_path, transform=preprocess)
     loader = torch.utils.data.DataLoader(
         dataset, batch_size=1, shuffle=False, num_workers=4,
         collate_fn=collate_fn, pin_memory=True)
@@ -88,16 +88,21 @@ def VILD_eval(model_path="VILD.pt", train_class=2, dataset_path="/home/llrt/文�
         # 防止images为空导致出错
         if(int(len(images)) == 0 or int(len(targets[0]["boxes"])) == 0):
             continue
+        # 清空每一次显示的矩形框，防止残留
         plt.cla()
         fig = plt.imshow(postprocess(images[0].to('cpu')))
         result, proposals = model(images, target)
         for p, r in zip(proposals, result):
-            for pro, re in zip(p, r):
+            for pro, re, i in zip(p, r, range(len(p))):
                 for bbox, core in zip(pro, re):
-                    fig.axes.add_patch(
-                        vocDataset.bbox_to_rect(bbox, 'blue'))
+                    if(core < 0.9):
+                        continue
+                    fig.axes.add_patch(vocDataset.bbox_to_rect(bbox, 'blue'))
+                    plt.text(bbox[0], bbox[1],
+                             vocDataset.classes[i-1]+': '+str(round(core, 2)))
         plt.pause(1)
 
 
 if __name__ == '__main__':
-    VILD_eval(train_class=2)
+    VILD_train(epoch=2, train_class=2, pretrain=False,
+               dataset_path="/home/llrt/文档/VOCdevkit/VOC2012")

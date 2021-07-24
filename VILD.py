@@ -99,12 +99,15 @@ class VILD(nn.Module):
 
         return image_embeddings
 
-    def get_label(self, proposal, target, image):
+    def get_label(self, proposal, target):
         """
         计算每个proposal的标签
         """
-        text_label = torch.zeros([1, self.train_class+1])
+        text_label = torch.zeros([1, self.train_class+1-1])
         for i in range(len(target['labels'])):
+            # 大于train_class的lable视作novel
+            if target['labels'][i] >= self.train_class-1:
+                continue
             if nms.iot(proposal.to('cpu'), target['boxes'][i]) >= self.iot_thresh:
                 text_label[0, target['labels'][i]+1] = 1
         return text_label
@@ -115,7 +118,7 @@ class VILD(nn.Module):
         """
         if self.training:
             text_inputs = torch.cat(
-                [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes[:self.train_class]]).to(device)
+                [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes[:self.train_class-1]]).to(device)
         else:
             text_inputs = torch.cat(
                 [clip.tokenize(f"a photo of a {c}") for c in vocDataset.classes[:self.train_class]]).to(device)
@@ -141,22 +144,20 @@ class VILD(nn.Module):
         # 将backgound_embedding和text_embedding拼接，方便计算
         text_embedding = torch.cat([self.background, text_embedding], dim=0)
         losses = 0
-
-        for regions, i in zip(region_embedding, range(targets.shape[0])):
-            for region, j in zip(regions, range(targets.shape[1])):
-                # 计算余弦相似度
-                Zr = self.sim(region.unsqueeze(0), text_embedding.float())
-                print("region:{}".format(nn.functional.softmax(Zr)))
-                print("label:{}".format(targets[i, j]))
-                loss_t = nn.CrossEntropyLoss()
-                if(torch.nonzero(targets[i, j]).shape[0] == 0):
-                    losses += 0.5*loss_t(Zr/5, torch.tensor([0]).to(device))
-                    continue
-                if(torch.nonzero(targets[i, j]).shape[0] == 1):
-                    losses += loss_t(Zr/5,
-                                     torch.nonzero(targets[i, j])[0].to(device))
-                else:
-                    losses += 0
+        for region, j in zip(region_embedding, range(targets.shape[0])):
+            # 计算余弦相似度
+            Zr = self.sim(region.unsqueeze(0), text_embedding.float())
+            print("region:{}".format(nn.functional.softmax(Zr)))
+            loss_t = nn.CrossEntropyLoss()
+            if(torch.nonzero(targets[j]).shape[0] == 0):
+                losses += 0.5*loss_t(Zr/5, torch.tensor([0]).to(device))
+                targets[j][0] = 1
+                print("label:{}".format(targets[j]))
+                continue
+            else:
+                losses += loss_t(Zr/5,
+                                 torch.nonzero(targets[j])[0].to(device))
+                print("label:{}".format(targets[j]))
         return losses
 
     def Loss_image(self, image_embedding, region_embedding):
@@ -227,7 +228,7 @@ class VILD(nn.Module):
         for i in range(int(self.proposals.shape[0])):
             for j in range(self.train_class+1):
                 all_classes[i][j], all_classes_pre[i][j] = nms.nms(
-                    np.array(all_classes[i][j]), np.array(all_classes_pre[i][j]))
+                    np.array(all_classes[i][j]), np.array(all_classes_pre[i][j]), thresh=0.1)
 
         return all_classes, all_classes_pre
 
@@ -265,17 +266,29 @@ class VILD(nn.Module):
         if self.training:
             images_embedding = self.VILD_image(images, model, preprocess)
             proposal_labels = torch.empty(
-                [self.proposals.shape[0], self.proposals.shape[1], self.train_class+1])
+                [self.proposals.shape[0], self.proposals.shape[1], self.train_class+1-1])
 
             # 获取每个proposal对应的one-hot标签
             for i in range(self.proposals.shape[0]):
                 for p, j in zip(self.proposals[i], range(self.proposals.shape[1])):
-                    proposal_labels[i, j] = self.get_label(
-                        p, targets[i], images[i])
+                    proposal_labels[i, j] = self.get_label(p, targets[i])
 
             # 计算VILD_text loss 和VILD_image loss
-            loss = self.Loss_text(
-                text_embedding, region_embedding, proposal_labels)
+            loss = 0
+
+            # 当有类为novel时，不计算text_loss
+            for i in range(len(targets)):
+                hasNovel = 0
+                for j in range(len(targets[i]['labels'])):
+                    # 大于train_class的lable视作novel
+                    if targets[i]['labels'][j] >= self.train_class-1:
+                        hasNovel = 1
+                if hasNovel == 1:
+                    continue
+                loss += self.Loss_text(
+                    text_embedding, region_embedding[i], proposal_labels[i])
+
+            # 计算image_loss，权重w=0.5
             loss += 0.5*self.Loss_image(images_embedding, region_embedding)
 
             # 单个proposal的平均loss,去除了proposals数量不同的影响
