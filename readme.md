@@ -34,6 +34,7 @@ result = nn.functional.softmax(result)
 在<a href="#paper">论文复现过程</a>里详细说明
 ### Experiment Results
 - AR on novel categories
+
 ![AR](imgs/AR.png)
 
 ***<center>region proposal network train with base categories ***vs*** base+novel categories</center>***
@@ -41,6 +42,7 @@ result = nn.functional.softmax(result)
 Observation:就算没有训练novel categories的数据，模型的性能也不会有很大的下降，所以一个好的region proposal network非常重要。
 
 - AP of CLIP
+
 ![AP](imgs/CLIP_AP.png)
 
 ***<center>Using CLIP for zero-shot detection</center>***
@@ -48,6 +50,7 @@ Observation:就算没有训练novel categories的数据，模型的性能也不�
 Observation:使用CLIP中的text_encoder在LVIS数据集上可以取得比监督学习更好的AP<sub>r</sub>，但是其他metric较差。
 
 - AP of VILD
+
 ![VILD_AP](imgs/VILD_AP.png)
 
 ***<center>ViLD outperforms the supervised learning counter-part on novel categories</center>***
@@ -55,6 +58,7 @@ Observation:使用CLIP中的text_encoder在LVIS数据集上可以取得比监督
 Observation:VILD-ensemble(VILD-text+VILD-image)在novel categories上取得的检测效果在测试中排第二，已经超越了监督学习，其中第一的VILD-text+CLIP速度比ViLD-ensemble要慢得多，所以VILD-ensemble(VILD-text+VILD-image)收益最高。
 
 - Generalization ability of ViLD
+
 ![gen](imgs/generalization.png)
 
 ***<center>Generalization ability of the detector trained with ViLD on LVIS</center>***
