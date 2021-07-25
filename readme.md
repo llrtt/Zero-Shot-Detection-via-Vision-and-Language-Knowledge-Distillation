@@ -11,14 +11,14 @@
 
 ## python库依赖
 先按照官网教程安装pytorch1.8.1再装执行
-```cpp
+```shell
 pip intall -r requirements.txt
 ```
 
 ## clip模型介绍
 论文中用到了openai开源的clip模型作为teacher model做KD(Knowledge Distillation)，clip由网上收集而来的4亿image-text pairs训练而成，意在将image以及其对应的text分别通过image-encoder和text-encoder映射到一个相互匹配的空间(embedding)，其中image-encoder负责用image生成region-embedding,text-encoder负责将带有标签的句子生成text-embedding，最后将两个embedding求余弦相似度再进行softmax得到各类的概率。
 ![CLIP 图标](imgs/CLIP.png)
-```cpp
+```python
 result = (region_embedding @ text_embedding.T)/(torch.linalg.norm(region_embedding, ord=1)*torch.linalg.norm(text_embedding, ord=1))
 result = nn.functional.softmax(result)
 ```
@@ -42,18 +42,21 @@ Observation:就算没有训练novel categories的数据，模型的性能也不�
 
 - AP of CLIP
 ![AP](imgs/CLIP_AP.png)
+
 ***<center>Using CLIP for zero-shot detection</center>***
 
 Observation:使用CLIP中的text_encoder在LVIS数据集上可以取得比监督学习更好的AP<sub>r</sub>，但是其他metric较差。
 
 - AP of VILD
 ![VILD_AP](imgs/VILD_AP.png)
-***<center>ViLD outperforms the supervised learning counter-
-part on novel categories</center>***
+
+***<center>ViLD outperforms the supervised learning counter-part on novel categories</center>***
+
 Observation:VILD-ensemble(VILD-text+VILD-image)在novel categories上取得的检测效果在测试中排第二，已经超越了监督学习，其中第一的VILD-text+CLIP速度比ViLD-ensemble要慢得多，所以VILD-ensemble(VILD-text+VILD-image)收益最高。
 
 - Generalization ability of ViLD
 ![gen](imgs/generalization.png)
+
 ***<center>Generalization ability of the detector trained with ViLD on LVIS</center>***
 
 Observation:ViLD在测试的数据集之间的泛化能力只比fintuning和监督学习差一点，但是也取得了很好的效果。
@@ -71,8 +74,11 @@ Observation:ViLD在测试的数据集之间的泛化能力只比fintuning和监�
 这样我们就把长度为***p***的vocabulary扩展到***pxq***。
 
 ![exp](imgs/expansion.png)
+
 ***<center>Systematic expansion of dataset vocabulary with colors</center>***
+
 上图中向水果的数据集中加入了颜色属性
+
 ### Conclusions
 ViLD在LVIS上取得了很好的zero-shot detection效果以及很强的泛化能力，是'长尾'类别检测提供了一个不需要大量标注的可行办法。
 
@@ -85,7 +91,7 @@ ViLD在LVIS上取得了很好的zero-shot detection效果以及很强的泛化�
 ### Crop regions && Get image_embedding
 目标由Faster_RCNN定位,提取ROIalign之后的proposals和features，**直接提取出来的proposals和features还不能直接用，要经过比例调整、边界限制，再筛除较小的proposal和features**，再将proposals和1.5倍大小的proposals经过crop和resize后输入CLIP模型的image_encoder中获得两种image_embdding，两种image_embdding进行相加后归一化得到最后的image_embdding，
 
-```cpp
+```python
 image_embedding = model.encode_image(proposal)
 image_embedding = image_embedding/torch.linalg.norm(image_embeddings, ord=1, dim=2)
 ```
@@ -93,7 +99,7 @@ crop和resize操作由clip.load()函数返回的preprocess函数进行，用到1
 
 ### Generate text_embedding
 首先用将训练的类别与'a photo of a {类名}'组合输入text_encoder获得text_embedding(每一个类对应一个text_embedding)，text_encoder本质是一个transformer模型，用于将sentence映射到高维的空间，寻找句子中词之间的联系，**由于CLIP模型中没有'backgound'对应的数据，故代码里用了一个1x512的可训练tensor代替，再加入text_embedding中一起计算,用nn.Parameter()来确保backgound向量可以被当作参数保存。**
-```cpp
+```python
 self.background = nn.Parameter(torch.rand(1, 512))
 ```
 ### Get proposals label
@@ -101,7 +107,7 @@ self.background = nn.Parameter(torch.rand(1, 512))
 
 ### Calculate text_loss
 得到text_embedding之后，为了找到可以在高维空间中与之对应的region_embedding，故将上一步中的features输入自行搭建的网络中，得到输出为1x512的向量(text_embedding以及image_embedding的维度也为1x512)。而为了计算text_embedding和region_embedding的相似度，论文里面采用了计算余弦相似度的方法，其中两个向量的余弦相似度越大代表两向量越相似，**下面用sim指代余弦相似度**。将单个feature和所有的text_embedding计算余弦相似度，结果保存成一个向量，将向量整体除于温度T后(**T是Kownleadge Distillation里面的知识，用于改变teacher model中小概率结果对student model的影响程度**)，对向量以及proposals对应的label求交叉熵，便得到了proposal中每一类的概率，其中主要过程的实现代码如下:
-```cpp
+```python
 import torch
 Zr = sim(region_embedding, text_embeddings)
 loss_t = torch.nn.CrossEntropyLoss()
@@ -127,7 +133,7 @@ image_loss的计算相对简单，直接计算image_embedding和region_embeddin�
 - train_class:训练时base class和novel class的数量之和
 
 - dataset_path:voc数据集的位置
-```cpp
+```python
 import vocDataset
 from VILD import VILD
 import matplotlib.pyplot as plt
