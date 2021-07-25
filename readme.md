@@ -2,6 +2,7 @@
 此工程用于复现论文Zero-Shot Detection via Vision and Language Knowledge Distillation中的部分效果
 
 # [[paper]](https://arxiv.org/pdf/2104.13921)
+
 ## 主要环境
 > Ubuntu 20.04
 
@@ -31,7 +32,7 @@ result = nn.functional.softmax(result)
 - 完成训练时不用到标注，推理时也可以检测到novel objects的zero-shot-detection
 - 利用CLIP模型进行Kownledge Distillation，训练出一个可以检测novel objects的student model
 ### Method
-在<a href="#paper">论文复现过程</a>里详细说明
+在<a href="#paper_re">论文复现过程</a>里详细说明
 ### Experiment Results
 - AR on novel categories
 
@@ -86,7 +87,7 @@ Observation:ViLD在测试的数据集之间的泛化能力只比fintuning和监�
 ### Conclusions
 ViLD在LVIS上取得了很好的zero-shot detection效果以及很强的泛化能力，是'长尾'类别检测提供了一个不需要大量标注的可行办法。
 
-## <a id="paper">论文复现过程</a>
+## <a id="paper_re">论文复现过程</a>
 ### Faster_RCNN training
 论文中采用的是Mask_RCNN来生成proposals
 ![Faster_RCNN 图标](imgs/faster_rcnn.jpg)
