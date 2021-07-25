@@ -108,7 +108,7 @@ class VILD(nn.Module):
             # 大于train_class的lable视作novel
             if target['labels'][i] >= self.train_class-1:
                 continue
-            if nms.iot(proposal.to('cpu'), target['boxes'][i]) >= self.iot_thresh:
+            if nms.iou(proposal.to('cpu'), target['boxes'][i]) >= self.iot_thresh:
                 text_label[0, target['labels'][i]+1] = 1
         return text_label
 
@@ -208,13 +208,14 @@ class VILD(nn.Module):
             p_s = []
             res_s = []
             for p, r in zip(proposals, reses):
-                if(r[0][0] >= 0.05):
+                if(r[0][0] >= 0.3):
                     continue
                 else:
                     p_s.append(p)
                     res_s.append(r)
             pro.append(p_s)
             res.append(res_s)
+        print(p_s)
 
         # 将proposals分类，依据是result中概率最大对应的数组下标
         for p, r, i in zip(pro, res, range(int(self.proposals.shape[0]))):
@@ -289,7 +290,7 @@ class VILD(nn.Module):
                     text_embedding, region_embedding[i], proposal_labels[i])
 
             # 计算image_loss，权重w=0.5
-            loss += 0.5*self.Loss_image(images_embedding, region_embedding)
+            loss += 0.2*self.Loss_image(images_embedding, region_embedding)
 
             # 单个proposal的平均loss,去除了proposals数量不同的影响
             avg_losses = loss / len(self.backbone.roi_heads.box_head.features)
@@ -308,5 +309,5 @@ class VILD(nn.Module):
 
         # 筛除背景
         self.proposals, result = self.filter_result(result)
-
+        print(self.proposals)
         return result, self.proposals

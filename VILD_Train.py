@@ -95,8 +95,8 @@ def VILD_eval(model_path="VILD.pt", train_class=2, dataset_path="/home/llrt/文�
         for p, r in zip(proposals, result):
             for pro, re, i in zip(p, r, range(len(p))):
                 for bbox, core in zip(pro, re):
-                    if(core < 0.9):
-                        continue
+                    # if(core < 0.9):
+                    #     continue
                     fig.axes.add_patch(vocDataset.bbox_to_rect(bbox, 'blue'))
                     plt.text(bbox[0], bbox[1],
                              vocDataset.classes[i-1]+': '+str(round(core, 2)))
@@ -104,5 +104,6 @@ def VILD_eval(model_path="VILD.pt", train_class=2, dataset_path="/home/llrt/文�
 
 
 if __name__ == '__main__':
-    VILD_train(epoch=2, train_class=2, pretrain=False,
-               dataset_path="/home/llrt/文档/VOCdevkit/VOC2012")
+    # VILD_train(epoch=1, train_class=2, pretrain=False,
+    #            dataset_path="/home/llrt/文档/VOCdevkit/VOC2012")
+    VILD_eval(train_class=2, dataset_path="/home/llrt/文档/VOCdevkit/VOC2012")
