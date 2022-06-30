@@ -1,6 +1,7 @@
 # Zero-Shot Detection via Vision and Language Knowledge Distillation论文复现代码
 此工程用于复现论文Zero-Shot Detection via Vision and Language Knowledge Distillation中的部分效果
 
+**此工程是本人用于练手的一个项目，仅仅是有了zero-shot的效果，后续已经不再维护，这是官方的仓库地址：**[https://github.com/tensorflow/tpu/tree/master/models/official/detection/projects/vild](https://github.com/tensorflow/tpu/tree/master/models/official/detection/projects/vild)
 # [[paper]](https://arxiv.org/pdf/2104.13921)
 
 ## 主要环境
